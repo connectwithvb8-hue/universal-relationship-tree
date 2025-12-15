@@ -16,18 +16,41 @@ SAFE_RELATIONS = {
 
 MAX_EDGES = 500
 
+# ---------------- Page Config ----------------
 st.set_page_config(
     page_title="Relation Fandom",
-    page_icon="🌳",
+    page_icon="",
     layout="wide"
 )
 
-st.title("🌳 Relation Fandom")
+# ---------------- CSS FIX (REMOVE UNWANTED SPACE) ----------------
+st.markdown(
+    """
+    <style>
+        .block-container {
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+        section.main > div {
+            padding-top: 0rem;
+        }
+        .stAlert {
+            margin-top: 0.4rem;
+            margin-bottom: 0.4rem;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# ---------------- Header ----------------
+st.title(" Relation Fandom")
 st.caption(
     "Stable family tree viewer. Scroll to explore. "
     "On mobile, use browser zoom if needed."
 )
 
+# ---------------- Sidebar ----------------
 with st.sidebar:
     uploaded_file = st.file_uploader(
         "Upload CSV or JSON",
@@ -38,7 +61,7 @@ with st.sidebar:
     person_b_input = st.text_input("Person B")
     search_clicked = st.button("Search Relationship")
 
-# ---------- Load data ----------
+# ---------------- Load Data ----------------
 if not uploaded_file:
     st.info("Upload a file to continue.")
     st.stop()
@@ -50,7 +73,7 @@ else:
 
 graph = build_graph(data)
 
-# ---------- Helpers ----------
+# ---------------- Helpers ----------------
 name_lookup = {n.lower(): n for n in graph.nodes()}
 
 def normalize(name):
@@ -58,18 +81,13 @@ def normalize(name):
         return None
     return name_lookup.get(name.strip().lower())
 
-# ---------- Tabs ----------
+# ---------------- Tabs ----------------
 tab_tree, tab_relation = st.tabs(
     ["Family Tree", "How Are They Related?"]
 )
 
-# ---------- TAB 1: TREE ----------
+# ---------------- TAB 1: FAMILY TREE ----------------
 with tab_tree:
-    st.info(
-        "Scroll vertically to explore the tree. "
-        "For zoom: use browser zoom (mobile or desktop)."
-    )
-
     tree = Digraph("FamilyTree")
     tree.attr(
         rankdir="TB",
@@ -102,7 +120,7 @@ with tab_tree:
             fontsize="10"
         )
 
-    # Edges with relation boxes
+    # Relation boxes on edges
     for i, (u, v, rel) in enumerate(edges):
         rel_node = f"rel_{i}"
         tree.node(
@@ -118,15 +136,15 @@ with tab_tree:
         tree.edge(u, rel_node)
         tree.edge(rel_node, v)
 
-    # Scrollable container (helps mobile & PC)
+    # Scroll container (prevents large empty gaps)
     st.markdown(
-        "<div style='height:85vh; overflow:auto;'>",
+        "<div style='height:80vh; overflow:auto; margin-top:0;'>",
         unsafe_allow_html=True
     )
     st.graphviz_chart(tree, use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- TAB 2: RELATION SEARCH ----------
+# ---------------- TAB 2: RELATION SEARCH ----------------
 with tab_relation:
     if not search_clicked:
         st.info("Enter two names and click Search.")
