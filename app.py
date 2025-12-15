@@ -16,54 +16,59 @@ SAFE_RELATIONS = {
 
 MAX_EDGES = 500
 
-# ---------------- Page Config ----------------
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(
     page_title="Relation Fandom",
-    page_icon="",
+    page_icon="🌳",
     layout="wide"
 )
 
-# ---------------- CSS FIX (REMOVE UNWANTED SPACE) ----------------
+# ---------------- HARD RESET STREAMLIT SPACING ----------------
 st.markdown(
     """
     <style>
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
+
         .block-container {
-            padding-top: 1rem;
-            padding-bottom: 1rem;
+            padding-top: 0rem !important;
+            padding-bottom: 0rem !important;
         }
+
         section.main > div {
-            padding-top: 0rem;
+            padding-top: 0rem !important;
         }
-        .stAlert {
-            margin-top: 0.4rem;
-            margin-bottom: 0.4rem;
+
+        div[data-testid="stVerticalBlock"] {
+            gap: 0rem !important;
+        }
+
+        .stTabs {
+            margin-top: 0rem !important;
         }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# ---------------- Header ----------------
-st.title(" Relation Fandom")
-st.caption(
-    "Stable family tree viewer. Scroll to explore. "
-    "On mobile, use browser zoom if needed."
+# ---------------- TITLE ----------------
+st.markdown(
+    "<h2 style='margin-bottom:0.3rem;'>🌳 Relation Fandom</h2>",
+    unsafe_allow_html=True
 )
 
-# ---------------- Sidebar ----------------
+# ---------------- SIDEBAR ----------------
 with st.sidebar:
     uploaded_file = st.file_uploader(
         "Upload CSV or JSON",
         type=["csv", "json"]
     )
-
     person_a_input = st.text_input("Person A")
     person_b_input = st.text_input("Person B")
     search_clicked = st.button("Search Relationship")
 
-# ---------------- Load Data ----------------
+# ---------------- LOAD DATA ----------------
 if not uploaded_file:
-    st.info("Upload a file to continue.")
     st.stop()
 
 if uploaded_file.name.lower().endswith(".json"):
@@ -73,7 +78,7 @@ else:
 
 graph = build_graph(data)
 
-# ---------------- Helpers ----------------
+# ---------------- HELPERS ----------------
 name_lookup = {n.lower(): n for n in graph.nodes()}
 
 def normalize(name):
@@ -81,12 +86,12 @@ def normalize(name):
         return None
     return name_lookup.get(name.strip().lower())
 
-# ---------------- Tabs ----------------
+# ---------------- TABS ----------------
 tab_tree, tab_relation = st.tabs(
     ["Family Tree", "How Are They Related?"]
 )
 
-# ---------------- TAB 1: FAMILY TREE ----------------
+# ---------------- TAB 1: TREE ----------------
 with tab_tree:
     tree = Digraph("FamilyTree")
     tree.attr(
@@ -101,16 +106,8 @@ with tab_tree:
         (u, v, a["type"])
         for u, v, a in graph.edges(data=True)
         if a.get("type") in SAFE_RELATIONS
-    ]
+    ][:MAX_EDGES]
 
-    if len(edges) > MAX_EDGES:
-        st.warning(
-            f"Tree is large ({len(edges)} relations). "
-            f"Showing first {MAX_EDGES}."
-        )
-        edges = edges[:MAX_EDGES]
-
-    # Nodes
     for node in graph.nodes():
         tree.node(
             node,
@@ -120,7 +117,6 @@ with tab_tree:
             fontsize="10"
         )
 
-    # Relation boxes on edges
     for i, (u, v, rel) in enumerate(edges):
         rel_node = f"rel_{i}"
         tree.node(
@@ -136,9 +132,8 @@ with tab_tree:
         tree.edge(u, rel_node)
         tree.edge(rel_node, v)
 
-    # Scroll container (prevents large empty gaps)
     st.markdown(
-        "<div style='height:80vh; overflow:auto; margin-top:0;'>",
+        "<div style='height:82vh; overflow:auto;'>",
         unsafe_allow_html=True
     )
     st.graphviz_chart(tree, use_container_width=True)
@@ -146,35 +141,18 @@ with tab_tree:
 
 # ---------------- TAB 2: RELATION SEARCH ----------------
 with tab_relation:
-    if not search_clicked:
-        st.info("Enter two names and click Search.")
-    else:
+    if search_clicked:
         a = normalize(person_a_input)
         b = normalize(person_b_input)
 
-        if not a or not b:
-            st.error("One or both names not found.")
-        else:
+        if a and b:
             try:
-                path = nx.shortest_path(
-                    graph.to_undirected(),
-                    a,
-                    b
-                )
-
-                st.success("Relationship Explanation")
-
+                path = nx.shortest_path(graph.to_undirected(), a, b)
                 for i in range(len(path) - 1):
                     x, y = path[i], path[i + 1]
                     if graph.has_edge(x, y):
-                        rel = graph[x][y]["type"]
-                        st.markdown(
-                            f"**{x}** is the **{rel}** of **{y}**"
+                        st.write(
+                            f"{x} → {graph[x][y]['type']} → {y}"
                         )
-                    else:
-                        st.markdown(
-                            f"**{x}** is related to **{y}**"
-                        )
-
             except nx.NetworkXNoPath:
-                st.error("No relationship path found.")
+                st.write("No relationship found.")
