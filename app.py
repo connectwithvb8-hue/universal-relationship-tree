@@ -41,7 +41,12 @@ if not uploaded_file:
     st.info("Upload a CSV or JSON file to continue.")
     st.stop()
 
-data = load_json(uploaded_file) if uploaded_file.name.lower().endswith(".json") else load_csv(uploaded_file)
+data = (
+    load_json(uploaded_file)
+    if uploaded_file.name.lower().endswith(".json")
+    else load_csv(uploaded_file)
+)
+
 graph = build_graph(data)
 
 name_lookup = {n.lower(): n for n in graph.nodes()}
@@ -52,8 +57,16 @@ def normalize(name):
 tab_tree, tab_relation = st.tabs(["Family Tree", "How Are They Related?"])
 
 with tab_tree:
+    st.info("Scroll vertically and use browser zoom (Ctrl + / Ctrl -) to explore the full tree.")
+
     tree = Digraph("FamilyTree", format="svg")
-    tree.attr(rankdir="TB", splines="ortho", nodesep="0.5", ranksep="0.8")
+    tree.attr(
+        rankdir="TB",
+        splines="ortho",
+        nodesep="0.5",
+        ranksep="1.2",
+        concentrate="false"
+    )
 
     safe_edges = [
         (u, v, attrs["type"])
@@ -77,8 +90,10 @@ with tab_tree:
             fontsize="10"
         )
 
-    for i, (u, v, rel) in enumerate(safe_edges):
-        rel_node = f"rel_{i}"
+    rel_idx = 0
+    for u, v, rel in safe_edges:
+        rel_node = f"rel_{rel_idx}"
+        rel_idx += 1
 
         tree.node(
             rel_node,
@@ -87,8 +102,8 @@ with tab_tree:
             style="rounded,filled",
             fillcolor="#f3f4f6",
             fontsize="9",
-            width="1.0",
-            height="0.3"
+            width="1.2",
+            height="0.35"
         )
 
         tree.edge(u, rel_node)
@@ -98,7 +113,7 @@ with tab_tree:
 
 with tab_relation:
     if not search_clicked:
-        st.info("Enter two names and click Search.")
+        st.info("Enter two names in the sidebar and click Search.")
     else:
         a = normalize(person_a_input)
         b = normalize(person_b_input)
@@ -112,6 +127,7 @@ with tab_relation:
 
                 for i in range(len(path) - 1):
                     x, y = path[i], path[i + 1]
+
                     if graph.has_edge(x, y):
                         rel = graph[x][y]["type"]
                         st.markdown(f"**{x}** is the **{rel}** of **{y}**")
