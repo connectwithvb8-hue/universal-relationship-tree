@@ -1,6 +1,7 @@
 import streamlit as st
 import networkx as nx
-from graphviz import Digraph
+from graphviz import Digraph, Source
+
 from loaders import load_csv, load_json
 from graph_builder import build_graph
 
@@ -16,13 +17,14 @@ MAX_EDGES = 500
 
 st.set_page_config(
     page_title="Relation Fandom",
-    page_icon="🌳",
+    page_icon="",
     layout="wide"
 )
 
-st.title("🌳 Relation Fandom")
+st.title(" Relation Fandom")
 st.markdown(
-    "A mobile-friendly family tree with smooth zooming and clear relationship labels."
+    "A mobile-friendly family tree with clear relationship labels and "
+    "safe cloud deployment."
 )
 
 with st.sidebar:
@@ -39,14 +41,16 @@ data = load_json(uploaded_file) if uploaded_file.name.endswith(".json") else loa
 graph = build_graph(data)
 
 name_lookup = {n.lower(): n for n in graph.nodes()}
-normalize = lambda n: name_lookup.get(n.strip().lower()) if n else None
+
+def normalize(name):
+    return name_lookup.get(name.strip().lower()) if name else None
 
 tab_tree, tab_relation = st.tabs(["Family Tree", "How Are They Related?"])
 
 with tab_tree:
-    st.info("Use pinch-to-zoom on mobile or Ctrl + scroll on desktop.")
+    st.info("Scroll to explore. Use browser zoom on mobile/desktop.")
 
-    tree = Digraph("FamilyTree", format="svg")
+    tree = Digraph("FamilyTree")
     tree.attr(
         rankdir="TB",
         splines="ortho",
@@ -55,9 +59,9 @@ with tab_tree:
     )
 
     safe_edges = [
-        (u, v, a["type"])
-        for u, v, a in graph.edges(data=True)
-        if a.get("type") in SAFE_RELATIONS
+        (u, v, attrs["type"])
+        for u, v, attrs in graph.edges(data=True)
+        if attrs.get("type") in SAFE_RELATIONS
     ][:MAX_EDGES]
 
     for node in graph.nodes():
@@ -78,7 +82,8 @@ with tab_tree:
         tree.edge(u, rel_node)
         tree.edge(rel_node, v)
 
-    svg = tree.pipe(format="svg").decode("utf-8")
+    # 🔑 CLOUD-SAFE RENDERING (NO pipe(), NO dot binary)
+    graphviz_source = Source(tree.source)
 
     st.components.v1.html(
         f"""
@@ -86,14 +91,10 @@ with tab_tree:
             width:100%;
             height:80vh;
             overflow:auto;
-            touch-action: pan-x pan-y pinch-zoom;
-            background-color: #0e1117;
+            background:#0e1117;
+            touch-action: pan-x pan-y;
         ">
-            <div style="
-                transform-origin: 0 0;
-            ">
-                {svg}
-            </div>
+            {graphviz_source._repr_svg_()}
         </div>
         """,
         height=800,
@@ -104,18 +105,23 @@ with tab_relation:
     if not search_clicked:
         st.info("Enter two names and click Search.")
     else:
-        a, b = normalize(person_a_input), normalize(person_b_input)
+        a = normalize(person_a_input)
+        b = normalize(person_b_input)
+
         if not a or not b:
             st.error("Names not found.")
         else:
             try:
                 path = nx.shortest_path(graph.to_undirected(), a, b)
                 st.success("Relationship Explanation")
+
                 for i in range(len(path) - 1):
                     x, y = path[i], path[i + 1]
                     if graph.has_edge(x, y):
-                        st.markdown(f"**{x}** is the **{graph[x][y]['type']}** of **{y}**")
+                        rel = graph[x][y]["type"]
+                        st.markdown(f"**{x}** is the **{rel}** of **{y}**")
                     else:
                         st.markdown(f"**{x}** is related to **{y}**")
+
             except nx.NetworkXNoPath:
                 st.error("No relationship path found.")
