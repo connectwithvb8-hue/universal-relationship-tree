@@ -19,7 +19,7 @@ MAX_EDGES = 500
 # ---------------- Page Config ----------------
 st.set_page_config(
     page_title="Relation Fandom",
-    page_icon="🌳",
+    page_icon="",
     layout="wide"
 )
 
@@ -36,7 +36,7 @@ st.markdown(
 )
 
 # ---------------- Header ----------------
-st.title("🌳 Relation Fandom")
+st.title(" Relation Fandom")
 st.caption(
     "Stable family tree viewer. Scroll to explore. "
     "On mobile, use browser zoom if needed."
