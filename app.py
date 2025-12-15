@@ -1,6 +1,6 @@
 import streamlit as st
 import networkx as nx
-from graphviz import Digraph, Source
+from graphviz import Digraph
 
 from loaders import load_csv, load_json
 from graph_builder import build_graph
@@ -23,8 +23,8 @@ st.set_page_config(
 
 st.title(" Relation Fandom")
 st.markdown(
-    "A mobile-friendly family tree with clear relationship labels and "
-    "safe cloud deployment."
+    "A scalable family tree viewer with clear relationship labels "
+    "and a safe explanation engine."
 )
 
 with st.sidebar:
@@ -41,14 +41,13 @@ data = load_json(uploaded_file) if uploaded_file.name.endswith(".json") else loa
 graph = build_graph(data)
 
 name_lookup = {n.lower(): n for n in graph.nodes()}
-
 def normalize(name):
     return name_lookup.get(name.strip().lower()) if name else None
 
 tab_tree, tab_relation = st.tabs(["Family Tree", "How Are They Related?"])
 
 with tab_tree:
-    st.info("Scroll to explore. Use browser zoom on mobile/desktop.")
+    st.info("Scroll vertically to explore the tree. Use browser zoom if needed.")
 
     tree = Digraph("FamilyTree")
     tree.attr(
@@ -59,13 +58,25 @@ with tab_tree:
     )
 
     safe_edges = [
-        (u, v, attrs["type"])
-        for u, v, attrs in graph.edges(data=True)
-        if attrs.get("type") in SAFE_RELATIONS
-    ][:MAX_EDGES]
+        (u, v, a["type"])
+        for u, v, a in graph.edges(data=True)
+        if a.get("type") in SAFE_RELATIONS
+    ]
+
+    if len(safe_edges) > MAX_EDGES:
+        st.warning(
+            f"Tree has {len(safe_edges)} relations. Showing first {MAX_EDGES}."
+        )
+        safe_edges = safe_edges[:MAX_EDGES]
 
     for node in graph.nodes():
-        tree.node(node, node, shape="box", style="rounded", fontsize="10")
+        tree.node(
+            node,
+            node,
+            shape="box",
+            style="rounded",
+            fontsize="10"
+        )
 
     for i, (u, v, rel) in enumerate(safe_edges):
         rel_node = f"rel_{i}"
@@ -82,24 +93,8 @@ with tab_tree:
         tree.edge(u, rel_node)
         tree.edge(rel_node, v)
 
-    # 🔑 CLOUD-SAFE RENDERING (NO pipe(), NO dot binary)
-    graphviz_source = Source(tree.source)
-
-    st.components.v1.html(
-        f"""
-        <div style="
-            width:100%;
-            height:80vh;
-            overflow:auto;
-            background:#0e1117;
-            touch-action: pan-x pan-y;
-        ">
-            {graphviz_source._repr_svg_()}
-        </div>
-        """,
-        height=800,
-        scrolling=True
-    )
+    # ✅ CLOUD-SAFE RENDER
+    st.graphviz_chart(tree, use_container_width=True)
 
 with tab_relation:
     if not search_clicked:
@@ -109,7 +104,7 @@ with tab_relation:
         b = normalize(person_b_input)
 
         if not a or not b:
-            st.error("Names not found.")
+            st.error("Names not found. Please check spelling.")
         else:
             try:
                 path = nx.shortest_path(graph.to_undirected(), a, b)
