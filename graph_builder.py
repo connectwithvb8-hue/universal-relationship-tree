@@ -1,22 +1,24 @@
 import networkx as nx
 
-def build_graph(data):
+
+def build_graph(records):
     G = nx.DiGraph()
 
-    for character in data["characters"]:
-        name = character["name"]
-        group = character.get("group", "Unknown")
+    for item in records:
+        person = item["character"]
+        relation = item["relationship"]
+        relative = item["relative"]
 
-        G.add_node(name, group=group)
+        if not person or not relation or not relative:
+            continue
 
-        for relation in character.get("relations", []):
-            rel_type = relation["type"]
-            target = relation["target"]
+        if not G.has_node(person):
+            G.add_node(person)
 
-            # Parent & mentor relations are reversed
-            if rel_type in ["parent", "mentor"]:
-                G.add_edge(target, name, type=rel_type)
-            else:
-                G.add_edge(name, target, type=rel_type)
+        if not G.has_node(relative):
+            G.add_node(relative)
+
+        if not G.has_edge(person, relative):
+            G.add_edge(person, relative, type=relation)
 
     return G

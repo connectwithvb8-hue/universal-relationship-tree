@@ -1,134 +1,123 @@
 import streamlit as st
-import streamlit.components.v1 as components
-from pyvis.network import Network
+from graphviz import Digraph
+import networkx as nx
 
-from loaders import load_json, load_csv
+from loaders import load_csv, load_json
 from graph_builder import build_graph
-from relation_styles import RELATION_STYLES
 
+SAFE_RELATIONS = {
+    "father", "mother", "son", "daughter",
+    "grandfather", "grandmother",
+    "grandson", "granddaughter",
+    "adoptive father", "adoptive mother",
+    "adoptive son", "adoptive daughter"
+}
 
+MAX_EDGES = 500
 
 st.set_page_config(
-    page_title="Relationship Intelligence Platform",
-    page_icon="🧠",
+    page_title="Relation Fandom",
+    page_icon="🌳",
     layout="wide"
 )
 
-st.title("🧠 Relationship Intelligence Platform")
+st.title("🌳 Relation Fandom")
 st.markdown(
-    """
-    A professional, interactive tool to visualize **family and social relationships**
-    for books, web series, movies, or custom datasets.
-
-    • Upload CSV or JSON  
-    • Zoom, pan, and drag nodes  
-    • Mobile & desktop friendly  
-    """
+    "A scalable family tree viewer with clear relationship labels and "
+    "a safe explanation engine."
 )
 
-
-
 with st.sidebar:
-    st.header("📤 Upload Data")
-
     uploaded_file = st.file_uploader(
-        "Upload CSV or JSON file",
+        "Upload CSV or JSON",
         type=["csv", "json"]
     )
 
-    st.markdown("---")
-    st.caption(
-        "📱 Mobile: pinch to zoom • drag to move\n\n"
-        "🖥 Desktop: scroll to zoom • drag to pan"
-    )
-
-    st.markdown("---")
-    st.caption(
-        "**Relations**\n"
-        "- Solid → Family\n"
-        "- Dashed → Friend\n"
-        "- Dotted → Enemy"
-    )
-
-
+    person_a_input = st.text_input("Person A")
+    person_b_input = st.text_input("Person B")
+    search_clicked = st.button("Search Relationship")
 
 if not uploaded_file:
-    st.info("👈 Upload a CSV or JSON file from the sidebar to get started.")
+    st.info("Upload a CSV or JSON file to continue.")
     st.stop()
 
-
-
-if uploaded_file.name.lower().endswith(".json"):
-    data = load_json(uploaded_file)
-else:
-    data = load_csv(uploaded_file)
-
+data = load_json(uploaded_file) if uploaded_file.name.lower().endswith(".json") else load_csv(uploaded_file)
 graph = build_graph(data)
 
+name_lookup = {n.lower(): n for n in graph.nodes()}
 
+def normalize(name):
+    return name_lookup.get(name.strip().lower()) if name else None
 
-net = Network(
-    height="600px",          # Mobile + desktop safe height
-    width="100%",
-    bgcolor="#ffffff",
-    font_color="#1f2937",
-    directed=True
-)
+tab_tree, tab_relation = st.tabs(["Family Tree", "How Are They Related?"])
 
-net.toggle_physics(True)
+with tab_tree:
+    tree = Digraph("FamilyTree", format="svg")
+    tree.attr(rankdir="TB", splines="ortho", nodesep="0.5", ranksep="0.8")
 
+    safe_edges = [
+        (u, v, attrs["type"])
+        for u, v, attrs in graph.edges(data=True)
+        if attrs.get("type") in SAFE_RELATIONS
+    ]
 
+    if len(safe_edges) > MAX_EDGES:
+        st.warning(
+            f"Tree has {len(safe_edges)} relations. Showing first {MAX_EDGES} "
+            "to keep the app responsive."
+        )
+        safe_edges = safe_edges[:MAX_EDGES]
 
-for node, attrs in graph.nodes(data=True):
-    net.add_node(
-        node,
-        label=node,
-        title=f"<b>{node}</b>",
-        shape="dot",
-        size=18
-    )
+    for node in graph.nodes():
+        tree.node(
+            node,
+            node,
+            shape="box",
+            style="rounded",
+            fontsize="10"
+        )
 
+    for i, (u, v, rel) in enumerate(safe_edges):
+        rel_node = f"rel_{i}"
 
+        tree.node(
+            rel_node,
+            rel,
+            shape="box",
+            style="rounded,filled",
+            fillcolor="#f3f4f6",
+            fontsize="9",
+            width="1.0",
+            height="0.3"
+        )
 
-for u, v, attrs in graph.edges(data=True):
-    rel = attrs.get("type", "relation")
-    style = RELATION_STYLES.get(rel, {})
+        tree.edge(u, rel_node)
+        tree.edge(rel_node, v)
 
-    net.add_edge(
-        u,
-        v,
-        label=rel,
-        color=style.get("color", "#6b7280"),
-        dashes=(style.get("style") == "dashed")
-    )
+    st.graphviz_chart(tree, use_container_width=True)
 
+with tab_relation:
+    if not search_clicked:
+        st.info("Enter two names and click Search.")
+    else:
+        a = normalize(person_a_input)
+        b = normalize(person_b_input)
 
+        if not a or not b:
+            st.error("Names not found. Please check spelling.")
+        else:
+            try:
+                path = nx.shortest_path(graph.to_undirected(), a, b)
+                st.success("Relationship Explanation")
 
-net.set_options("""
-var options = {
-  interaction: {
-    hover: true,
-    dragNodes: true,
-    dragView: true,
-    zoomView: true,
-    navigationButtons: true,
-    keyboard: false
-  },
-  physics: {
-    enabled: true,
-    stabilization: {
-      iterations: 200
-    },
-    barnesHut: {
-      gravitationalConstant: -20000,
-      springLength: 120,
-      springConstant: 0.04
-    }
-  }
-}
-""")
+                for i in range(len(path) - 1):
+                    x, y = path[i], path[i + 1]
+                    if graph.has_edge(x, y):
+                        rel = graph[x][y]["type"]
+                        st.markdown(f"**{x}** is the **{rel}** of **{y}**")
+                    else:
+                        rel = graph[y][x]["type"]
+                        st.markdown(f"**{x}** is related to **{y}** via **{rel}**")
 
-
-
-html = net.generate_html()
-components.html(html, height=650, scrolling=True)
+            except nx.NetworkXNoPath:
+                st.error("No relationship path found.")
