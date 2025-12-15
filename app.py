@@ -1,6 +1,8 @@
 import streamlit as st
 import networkx as nx
-from graphviz import Digraph
+from pyvis.network import Network
+import tempfile
+import os
 
 from loaders import load_csv, load_json
 from graph_builder import build_graph
@@ -10,22 +12,32 @@ SAFE_RELATIONS = {
     "grandfather", "grandmother",
     "grandson", "granddaughter",
     "adoptive father", "adoptive mother",
-    "adoptive son", "adoptive daughter"
+    "adoptive son", "adoptive daughter",
+    "friend", "spouse"
 }
 
-MAX_EDGES = 500
+MAX_EDGES = 800
 
 st.set_page_config(
     page_title="Relation Fandom",
-    page_icon="",
+    page_icon="🌳",
     layout="wide"
 )
 
-st.title(" Relation Fandom")
+st.title("🌳 Relation Fandom")
 st.markdown(
-    "A scalable family tree viewer with clear relationship labels "
-    "and a safe explanation engine."
+    "An interactive, smooth, mobile-friendly relationship tree with zoom and pan."
 )
+
+@st.cache_data(show_spinner=False)
+def load_data(file):
+    if file.name.lower().endswith(".json"):
+        return load_json(file)
+    return load_csv(file)
+
+@st.cache_data(show_spinner=False)
+def build_cached_graph(data):
+    return build_graph(data)
 
 with st.sidebar:
     uploaded_file = st.file_uploader("Upload CSV or JSON", type=["csv", "json"])
@@ -37,8 +49,8 @@ if not uploaded_file:
     st.info("Upload a CSV or JSON file to continue.")
     st.stop()
 
-data = load_json(uploaded_file) if uploaded_file.name.endswith(".json") else load_csv(uploaded_file)
-graph = build_graph(data)
+data = load_data(uploaded_file)
+graph = build_cached_graph(data)
 
 name_lookup = {n.lower(): n for n in graph.nodes()}
 def normalize(name):
@@ -47,54 +59,52 @@ def normalize(name):
 tab_tree, tab_relation = st.tabs(["Family Tree", "How Are They Related?"])
 
 with tab_tree:
-    st.info("Scroll vertically to explore the tree. Use browser zoom if needed.")
+    st.info("Pinch-to-zoom on mobile • Scroll / drag to pan • Double-click to reset view")
 
-    tree = Digraph("FamilyTree")
-    tree.attr(
-        rankdir="TB",
-        splines="ortho",
-        nodesep="0.5",
-        ranksep="1.2"
+    net = Network(
+        height="80vh",
+        width="100%",
+        bgcolor="#0e1117",
+        font_color="white",
+        directed=True
     )
 
-    safe_edges = [
-        (u, v, a["type"])
-        for u, v, a in graph.edges(data=True)
-        if a.get("type") in SAFE_RELATIONS
-    ]
-
-    if len(safe_edges) > MAX_EDGES:
-        st.warning(
-            f"Tree has {len(safe_edges)} relations. Showing first {MAX_EDGES}."
-        )
-        safe_edges = safe_edges[:MAX_EDGES]
+    net.toggle_physics(False)
 
     for node in graph.nodes():
-        tree.node(
+        net.add_node(
             node,
-            node,
+            label=node,
             shape="box",
-            style="rounded",
-            fontsize="10"
+            color="#1f2937"
         )
 
-    for i, (u, v, rel) in enumerate(safe_edges):
-        rel_node = f"rel_{i}"
-        tree.node(
-            rel_node,
-            rel,
-            shape="box",
-            style="rounded,filled",
-            fillcolor="#f3f4f6",
-            fontsize="9",
-            width="1.2",
-            height="0.35"
-        )
-        tree.edge(u, rel_node)
-        tree.edge(rel_node, v)
+    count = 0
+    for u, v, attrs in graph.edges(data=True):
+        rel = attrs.get("type")
+        if rel in SAFE_RELATIONS:
+            net.add_edge(
+                u,
+                v,
+                label=rel,
+                arrows="to",
+                font={"size": 12, "align": "middle"},
+                color="#9ca3af"
+            )
+            count += 1
+        if count >= MAX_EDGES:
+            break
 
-    # ✅ CLOUD-SAFE RENDER
-    st.graphviz_chart(tree, use_container_width=True)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp:
+        net.save_graph(tmp.name)
+        html_path = tmp.name
+
+    with open(html_path, "r", encoding="utf-8") as f:
+        html = f.read()
+
+    st.components.v1.html(html, height=800, scrolling=True)
+
+    os.unlink(html_path)
 
 with tab_relation:
     if not search_clicked:
@@ -104,7 +114,7 @@ with tab_relation:
         b = normalize(person_b_input)
 
         if not a or not b:
-            st.error("Names not found. Please check spelling.")
+            st.error("Names not found.")
         else:
             try:
                 path = nx.shortest_path(graph.to_undirected(), a, b)
