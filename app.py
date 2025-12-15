@@ -25,18 +25,14 @@ st.set_page_config(
 )
 
 st.title("🌳 Relation Fandom")
-st.markdown(
-    "An interactive, smooth, mobile-friendly relationship tree with zoom and pan."
-)
+st.markdown("Smooth, zoomable, mobile-friendly relationship tree.")
 
 @st.cache_data(show_spinner=False)
 def load_data(file):
-    if file.name.lower().endswith(".json"):
-        return load_json(file)
-    return load_csv(file)
+    return load_json(file) if file.name.lower().endswith(".json") else load_csv(file)
 
 @st.cache_data(show_spinner=False)
-def build_cached_graph(data):
+def cached_graph(data):
     return build_graph(data)
 
 with st.sidebar:
@@ -46,11 +42,11 @@ with st.sidebar:
     search_clicked = st.button("Search Relationship")
 
 if not uploaded_file:
-    st.info("Upload a CSV or JSON file to continue.")
+    st.info("Upload a file to continue.")
     st.stop()
 
 data = load_data(uploaded_file)
-graph = build_cached_graph(data)
+graph = cached_graph(data)
 
 name_lookup = {n.lower(): n for n in graph.nodes()}
 def normalize(name):
@@ -59,7 +55,7 @@ def normalize(name):
 tab_tree, tab_relation = st.tabs(["Family Tree", "How Are They Related?"])
 
 with tab_tree:
-    st.info("Pinch-to-zoom on mobile • Scroll / drag to pan • Double-click to reset view")
+    st.info("Pinch-to-zoom on mobile • Drag to pan • Scroll to zoom")
 
     net = Network(
         height="80vh",
@@ -69,7 +65,35 @@ with tab_tree:
         directed=True
     )
 
-    net.toggle_physics(False)
+    net.set_options("""
+    {
+      "layout": {
+        "hierarchical": {
+          "enabled": true,
+          "direction": "UD",
+          "sortMethod": "directed",
+          "levelSeparation": 120,
+          "nodeSpacing": 180,
+          "treeSpacing": 200
+        }
+      },
+      "physics": {
+        "enabled": false
+      },
+      "edges": {
+        "smooth": {
+          "type": "cubicBezier",
+          "forceDirection": "vertical",
+          "roundness": 0.4
+        }
+      },
+      "interaction": {
+        "dragNodes": true,
+        "dragView": true,
+        "zoomView": true
+      }
+    }
+    """)
 
     for node in graph.nodes():
         net.add_node(
@@ -79,7 +103,7 @@ with tab_tree:
             color="#1f2937"
         )
 
-    count = 0
+    edge_count = 0
     for u, v, attrs in graph.edges(data=True):
         rel = attrs.get("type")
         if rel in SAFE_RELATIONS:
@@ -91,8 +115,8 @@ with tab_tree:
                 font={"size": 12, "align": "middle"},
                 color="#9ca3af"
             )
-            count += 1
-        if count >= MAX_EDGES:
+            edge_count += 1
+        if edge_count >= MAX_EDGES:
             break
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp:
@@ -103,7 +127,6 @@ with tab_tree:
         html = f.read()
 
     st.components.v1.html(html, height=800, scrolling=True)
-
     os.unlink(html_path)
 
 with tab_relation:
